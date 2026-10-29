@@ -17,8 +17,11 @@ Project for mobile systems
 - Pokazanie opóźnienia aktualnego przejazdu na podstawie aktualnej lokalizacji telefonu.
 
 ## Project status updates
-#### 19.10.2026 - 26.10.2026
+#### 19.10.2026 - 25.10.2026
 - Worked on IDE and initial project setup
+
+#### 26.10.2026 - 01.11.2026
+- Performed final touches and tests for https://github.com/RCRalph/TravelTimer, which will serve as public transport routes dataset
 
 ## Getting Started
 
