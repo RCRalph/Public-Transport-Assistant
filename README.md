@@ -23,6 +23,9 @@ Project for mobile systems
 #### 26.10.2026 - 01.11.2026
 - Performed final touches and tests for https://github.com/RCRalph/TravelTimer, which will serve as public transport routes dataset
 
+#### 02.11.2026 - 08.11.2026
+- Replaced default application with map screen
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
