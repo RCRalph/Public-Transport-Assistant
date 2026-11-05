@@ -25,6 +25,7 @@ Project for mobile systems
 
 #### 02.11.2026 - 08.11.2026
 - Replaced default application with map screen
+- Added stop groups to map screen as dots
 
 ## Getting Started
 

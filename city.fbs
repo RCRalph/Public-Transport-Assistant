@@ -1,0 +1,52 @@
+namespace City;
+
+struct LatLon {
+  latitude:float32;
+  longitude:float32;
+}
+
+table StopInfo {
+  id:string (required);
+  name:string (required);
+  location:LatLon (required);
+}
+
+table StopGroupNeighbor {
+  stop_group_name:string (required);
+  distance:ushort;
+}
+
+table StopGroup {
+  name:string (required);
+  center:LatLon (required);
+  radius:ushort;
+  stops:[StopInfo] (required);
+  neighbors:[StopGroupNeighbor] (required);
+}
+
+table TripStop {
+  stop_id:string (required);
+  arrival_time:uint32;
+  departure_time:uint32;
+}
+
+table Trip {
+  id:string (required);
+  destination:string (required);
+  stops:[TripStop] (required);
+}
+
+table Route {
+  name:string;
+  trips:[Trip] (required);
+}
+
+table City {
+  name:string (required);
+  country:string (required);
+  created_at:uint64;
+  stop_groups:[StopGroup] (required);
+  routes:[Route] (required);
+}
+
+root_type City;
