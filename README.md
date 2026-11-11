@@ -27,6 +27,9 @@ Project for mobile systems
 - Replaced default application with map screen
 - Added stop groups to map screen as dots
 
+#### 09.11.2026 - 15.11.2026
+- Initial work on displaying device location and orientation
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
