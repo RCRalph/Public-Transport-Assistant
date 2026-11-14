@@ -1,21 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:public_transport_assistant/map_screen/map_screen.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:public_transport_assistant/location_permission.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
-}
-
-Future<void> _requestLocationPermission() async {
-  var status = await Permission.location.status;
-
-  if (!status.isGranted) {
-    status = await Permission.location.request();
-  }
-
-  if (!status.isGranted) {
-    debugPrint('Location permission not granted');
-  }
 }
 
 class MyApp extends StatelessWidget {
@@ -23,11 +11,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    _requestLocationPermission();
-
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: MapScreen(),
+      home: LocationPermissionScreen(),
     );
   }
 }

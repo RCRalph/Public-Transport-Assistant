@@ -37,6 +37,7 @@ dependencies:
   maplibre_gl: ^0.28.0
   flat_buffers: ^25.9.23
   permission_handler: ^12.0.0
+  geodesy: ^0.12.0
 
 dev_dependencies:
   flutter_test:

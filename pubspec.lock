@@ -104,6 +104,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  geodesy:
+    dependency: "direct main"
+    description:
+      name: geodesy
+      sha256: "09b95094104e116b71f9702e928bb822846de54e9e69bb73a941e38af2ba53f9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.12.0"
   image:
     dependency: transitive
     description:
@@ -112,6 +120,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.12.0"
+  intl:
+    dependency: transitive
+    description:
+      name: intl
+      sha256: "1ca20c894b1717686a2319b8548763d812bc0aabdac580420a44c5178c57a867"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.20.3"
+  latlong2:
+    dependency: transitive
+    description:
+      name: latlong2
+      sha256: "84b776b100a84a684a0aaa3fa4dc2c9b1931c658de533701ee4e09bfa991f8dc"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.10.1"
   leak_tracker:
     dependency: transitive
     description:

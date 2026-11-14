@@ -1,12 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:geodesy/geodesy.dart' as geo;
 import 'package:maplibre_gl/maplibre_gl.dart';
-
-import "package:public_transport_assistant/map_screen/model.dart";
-import 'package:public_transport_assistant/generated/city_city_generated.dart'
-    as city_fb;
+import 'package:public_transport_assistant/api/city_data.dart';
+import 'package:public_transport_assistant/api/model.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -16,123 +14,82 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  static const String _cityFilePath = 'city.bin';
+
+  late final Future<CityData> _cityFuture;
+
   MapLibreMapController? _mapController;
 
-  Map<int, StopGroup> _stopGroups = {};
-  Map<String, Stop> _stops = {};
+  CityData? _cityData;
+
   StopGroup? _closestStopGroup;
 
   bool _styleLoaded = false;
   bool _markersAdded = false;
   bool _closestStopLayerAdded = false;
 
+  // Location following state.
+  bool _isFollowingUser = true;
+  LatLng? _userLocation;
+
   LatLng _center = const LatLng(0, 0);
 
   @override
   void initState() {
     super.initState();
-    _loadCity();
+
+    _cityFuture = CityData.fromFile(_cityFilePath);
   }
 
-  Future<city_fb.City> _loadCityData() async {
-    final data = await rootBundle.load('city.bin');
+  void _onCityLoaded(CityData cityData) {
+    if (identical(_cityData, cityData)) return;
 
-    final bytes = Uint8List.fromList(
-      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-    );
+    _cityData = cityData;
 
-    return city_fb.City(bytes);
-  }
+    final groups = cityData.stopGroups.values.toList();
 
-  Future<void> _loadCity() async {
-    try {
-      final city = await _loadCityData();
+    if (groups.isNotEmpty) {
+      final latitudeMin = groups.map((g) => g.latitude).reduce(min);
+      final latitudeMax = groups.map((g) => g.latitude).reduce(max);
 
-      final stops = <String, Stop>{};
-      final stopGroups = <int, StopGroup>{};
+      final longitudeMin = groups.map((g) => g.longitude).reduce(min);
+      final longitudeMax = groups.map((g) => g.longitude).reduce(max);
 
-      (city.stopGroups ?? <city_fb.StopGroup>[]).asMap().forEach((id, item) {
-        final stopsInGroup = <Stop>[];
-
-        for (final stop in item.stops ?? <city_fb.StopInfo>[]) {
-          stopsInGroup.add(
-            Stop(
-              id: stop.id ?? "",
-              name: stop.name ?? "",
-              latitude: stop.location?.latitude ?? 0,
-              longitude: stop.location?.longitude ?? 0,
-            ),
-          );
-        }
-
-        final stopGroup = StopGroup(
-          id: id,
-          name: item.name ?? "",
-          latitude: item.center?.latitude ?? 0,
-          longitude: item.center?.longitude ?? 0,
-          stops: stopsInGroup,
-        );
-
-        stopGroups[stopGroup.id] = stopGroup;
-
-        for (final stop in stopsInGroup) {
-          stops[stop.id] = stop;
-        }
-      });
-
-      if (!mounted) return;
-
-      setState(() {
-        _stops = stops;
-        _stopGroups = stopGroups;
-
-        if (stops.isNotEmpty) {
-          // Calculate the average coordinates of all stops.
-          final latitudeMin = stopGroups.values
-              .map((stop) => stop.latitude)
-              .reduce(min);
-
-          final latitudeMax = stopGroups.values
-              .map((stop) => stop.latitude)
-              .reduce(max);
-
-          final longitudeMin = stopGroups.values
-              .map((stop) => stop.longitude)
-              .reduce(min);
-
-          final longitudeMax = stopGroups.values
-              .map((stop) => stop.longitude)
-              .reduce(max);
-
-          _center = LatLng(
-            (latitudeMin + latitudeMax) / 2,
-            (longitudeMin + longitudeMax) / 2,
-          );
-        }
-      });
-
-      _addMarkersIfReady();
-    } catch (e) {
-      debugPrint('Failed to load city.bin: $e');
+      _center = LatLng(
+        (latitudeMin + latitudeMax) / 2,
+        (longitudeMin + longitudeMax) / 2,
+      );
     }
+
+    _addMarkersIfReady();
   }
 
   void _onMapCreated(MapLibreMapController controller) {
+    debugPrint('MAP CREATED');
+
     _mapController = controller;
+
     _addMarkersIfReady();
   }
 
   void _onStyleLoaded() {
     _styleLoaded = true;
+
+    _markersAdded = false;
+    _closestStopLayerAdded = false;
+    _closestStopGroup = null;
+
     _addMarkersIfReady();
   }
 
   Future<void> _addMarkersIfReady() async {
     final controller = _mapController;
+    final cityData = _cityData;
 
     if (controller == null ||
+        cityData == null ||
         !_styleLoaded ||
-        _stops.isEmpty ||
+        cityData.stops.isEmpty ||
         _markersAdded) {
       return;
     }
@@ -142,7 +99,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final geoJson = {
         'type': 'FeatureCollection',
-        'features': _stops.entries.map((stop) {
+        'features': cityData.stops.entries.map((stop) {
           return {
             'type': 'Feature',
             'geometry': {
@@ -154,13 +111,11 @@ class _MapScreenState extends State<MapScreen> {
         }).toList(),
       };
 
-      // Add all stop groups in a single GeoJSON source.
       await controller.addSource(
         'stop-groups-source',
         GeojsonSourceProperties(data: geoJson),
       );
 
-      // Render all stop groups using one native circle layer.
       await controller.addCircleLayer(
         'stop-groups-source',
         'stop-groups-layer',
@@ -173,7 +128,9 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
 
-      await controller.animateCamera(CameraUpdate.newLatLngZoom(_center, 12));
+      // IMPORTANT:
+      // Do not animate the camera here.
+      // Location tracking controls the camera automatically.
     } catch (e) {
       debugPrint('Failed to render stop groups: $e');
       _markersAdded = false;
@@ -181,18 +138,24 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _onUserLocationUpdated(UserLocation userLocation) {
-    if (_stops.isEmpty || !_styleLoaded) return;
+    final position = userLocation.position;
 
-    final userLatLng = userLocation.position;
+    debugPrint('GPS UPDATE: ${position.latitude}, ${position.longitude}');
 
-    // Find the closest stop using squared Euclidean distance
+    _userLocation = position;
+
+    final cityData = _cityData;
+
+    if (cityData == null) return;
+
     StopGroup? closestStopGroup;
     double minDistance = double.infinity;
 
-    for (final group in _stopGroups.values) {
-      final dx = group.latitude - userLatLng.latitude;
-      final dy = group.longitude - userLatLng.longitude;
-      final distanceSquared = dx * dx + dy * dy;
+    for (final group in cityData.stopGroups.values) {
+      final distanceSquared = geo.Haversine().distance(
+        geo.LatLng(position.latitude, position.longitude),
+        geo.LatLng(group.latitude, group.longitude),
+      );
 
       if (distanceSquared < minDistance) {
         minDistance = distanceSquared;
@@ -207,11 +170,56 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // Called when MapLibre stops following the user's location,
+  // for example, when the user manually moves the map.
+  void _onCameraTrackingDismissed() {
+    if (!mounted || !_isFollowingUser) return;
+
+    setState(() {
+      _isFollowingUser = false;
+    });
+  }
+
+  // Keep our UI state synchronized with MapLibre.
+  void _onCameraTrackingChanged(MyLocationTrackingMode mode) {
+    final isFollowing = mode != MyLocationTrackingMode.none;
+
+    if (!mounted || _isFollowingUser == isFollowing) return;
+
+    setState(() {
+      _isFollowingUser = isFollowing;
+    });
+  }
+
+  // Resume location following when the user presses the button.
+  Future<void> _resumeLocationFollowing() async {
+    final controller = _mapController;
+
+    if (controller == null) return;
+
+    try {
+      await controller.updateMyLocationTrackingMode(
+        MyLocationTrackingMode.trackingCompass,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isFollowingUser = true;
+      });
+    } catch (e) {
+      debugPrint('Failed to resume location tracking: $e');
+    }
+  }
+
   Future<void> _highlightClosestStop(StopGroup stopGroup) async {
     final controller = _mapController;
-    if (controller == null || !_styleLoaded) return;
 
-    final List<Object> features = [];
+    if (controller == null || !_styleLoaded || !_markersAdded) {
+      return;
+    }
+
+    final features = <Object>[];
 
     for (final stop in stopGroup.stops) {
       features.add({
@@ -232,8 +240,6 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      _closestStopLayerAdded = true;
-
       await controller.addSource(
         'closest-stop-source',
         GeojsonSourceProperties(data: geoJson),
@@ -250,6 +256,8 @@ class _MapScreenState extends State<MapScreen> {
           circleStrokeWidth: 2,
         ),
       );
+
+      _closestStopLayerAdded = true;
     } catch (e) {
       debugPrint('Failed to highlight closest stop: $e');
     }
@@ -258,19 +266,88 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          MapLibreMap(
-            styleString: 'https://tiles.openfreemap.org/styles/liberty',
-            initialCameraPosition: CameraPosition(target: _center, zoom: 12),
-            onMapCreated: _onMapCreated,
-            onStyleLoadedCallback: _onStyleLoaded,
-            myLocationEnabled: true,
-            myLocationTrackingMode: MyLocationTrackingMode.trackingCompass,
-            myLocationRenderMode: MyLocationRenderMode.compass,
-            onUserLocationUpdated: _onUserLocationUpdated,
-          ),
-        ],
+      body: FutureBuilder<CityData>(
+        future: _cityFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                  const SizedBox(height: 12),
+                  const Text('Failed to load city data'),
+                  const SizedBox(height: 8),
+                  Text('${snapshot.error}'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      // Retry implementation can be added here.
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(child: Text('No city data available'));
+          }
+
+          final cityData = snapshot.data!;
+
+          _onCityLoaded(cityData);
+
+          return Stack(
+            children: [
+              MapLibreMap(
+                styleString: 'https://tiles.openfreemap.org/styles/liberty',
+
+                // Fallback position while waiting for GPS.
+                initialCameraPosition: CameraPosition(
+                  target: _center,
+                  zoom: 12,
+                ),
+
+                onMapCreated: _onMapCreated,
+                onStyleLoadedCallback: _onStyleLoaded,
+
+                myLocationEnabled: true,
+                myLocationTrackingMode: MyLocationTrackingMode.trackingCompass,
+                myLocationRenderMode: MyLocationRenderMode.compass,
+
+                onUserLocationUpdated: _onUserLocationUpdated,
+
+                onCameraTrackingDismissed: _onCameraTrackingDismissed,
+                onCameraTrackingChanged: _onCameraTrackingChanged,
+
+                locationEnginePlatforms: const LocationEnginePlatforms.android(
+                  enableHighAccuracy: true,
+                ),
+              ),
+
+              // Return-to-location button.
+              if (!_isFollowingUser)
+                Positioned(
+                  right: 16,
+                  bottom: 32,
+                  child: FloatingActionButton(
+                    heroTag: 'follow-location-button',
+                    onPressed: _resumeLocationFollowing,
+                    tooltip: 'Follow my location',
+                    backgroundColor: Colors.white,
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    child: const Icon(Icons.my_location),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
