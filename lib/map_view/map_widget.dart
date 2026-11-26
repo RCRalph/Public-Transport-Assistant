@@ -6,21 +6,17 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:public_transport_assistant/api/city_data.dart';
 import 'package:public_transport_assistant/api/model.dart';
 
-class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+class MapWidget extends StatefulWidget {
+  const MapWidget({super.key, required this.cityData});
+
+  final CityData cityData;
 
   @override
-  State<MapScreen> createState() => _MapScreenState();
+  State<MapWidget> createState() => _MapWidgetState();
 }
 
-class _MapScreenState extends State<MapScreen> {
-  static const String _cityFilePath = 'city.bin';
-
-  late final Future<CityData> _cityFuture;
-
+class _MapWidgetState extends State<MapWidget> {
   MapLibreMapController? _mapController;
-
-  CityData? _cityData;
 
   StopGroup? _closestStopGroup;
 
@@ -28,24 +24,25 @@ class _MapScreenState extends State<MapScreen> {
   bool _markersAdded = false;
   bool _closestStopLayerAdded = false;
 
-  // Location following state.
   bool _isFollowingUser = true;
-  LatLng? _userLocation;
 
   LatLng _center = const LatLng(0, 0);
 
   @override
   void initState() {
     super.initState();
-
-    _cityFuture = CityData.fromFile(_cityFilePath);
+    _applyCityData(widget.cityData, resetLayers: false);
   }
 
-  void _onCityLoaded(CityData cityData) {
-    if (identical(_cityData, cityData)) return;
+  @override
+  void didUpdateWidget(covariant MapWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.cityData, widget.cityData)) {
+      _applyCityData(widget.cityData, resetLayers: true);
+    }
+  }
 
-    _cityData = cityData;
-
+  void _applyCityData(CityData cityData, {required bool resetLayers}) {
     final groups = cityData.stopGroups.values.toList();
 
     if (groups.isNotEmpty) {
@@ -59,6 +56,12 @@ class _MapScreenState extends State<MapScreen> {
         (latitudeMin + latitudeMax) / 2,
         (longitudeMin + longitudeMax) / 2,
       );
+    }
+
+    if (resetLayers) {
+      _markersAdded = false;
+      _closestStopLayerAdded = false;
+      _closestStopGroup = null;
     }
 
     _addMarkersIfReady();
@@ -84,10 +87,9 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _addMarkersIfReady() async {
     final controller = _mapController;
-    final cityData = _cityData;
+    final cityData = widget.cityData;
 
     if (controller == null ||
-        cityData == null ||
         !_styleLoaded ||
         cityData.stops.isEmpty ||
         _markersAdded) {
@@ -139,14 +141,7 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onUserLocationUpdated(UserLocation userLocation) {
     final position = userLocation.position;
-
-    debugPrint('GPS UPDATE: ${position.latitude}, ${position.longitude}');
-
-    _userLocation = position;
-
-    final cityData = _cityData;
-
-    if (cityData == null) return;
+    final cityData = widget.cityData;
 
     StopGroup? closestStopGroup;
     double minDistance = double.infinity;
@@ -194,7 +189,6 @@ class _MapScreenState extends State<MapScreen> {
   // Resume location following when the user presses the button.
   Future<void> _resumeLocationFollowing() async {
     final controller = _mapController;
-
     if (controller == null) return;
 
     try {
@@ -214,7 +208,6 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _highlightClosestStop(StopGroup stopGroup) async {
     final controller = _mapController;
-
     if (controller == null || !_styleLoaded || !_markersAdded) {
       return;
     }
@@ -265,90 +258,46 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder<CityData>(
-        future: _cityFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return Stack(
+      children: [
+        MapLibreMap(
+          styleString: 'https://tiles.openfreemap.org/styles/liberty',
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 40),
-                  const SizedBox(height: 12),
-                  const Text('Failed to load city data'),
-                  const SizedBox(height: 8),
-                  Text('${snapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      // Retry implementation can be added here.
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            );
-          }
+          // Fallback position while waiting for GPS.
+          initialCameraPosition: CameraPosition(target: _center, zoom: 12),
 
-          if (!snapshot.hasData) {
-            return const Center(child: Text('No city data available'));
-          }
+          onMapCreated: _onMapCreated,
+          onStyleLoadedCallback: _onStyleLoaded,
 
-          final cityData = snapshot.data!;
+          myLocationEnabled: true,
+          myLocationTrackingMode: MyLocationTrackingMode.trackingCompass,
+          myLocationRenderMode: MyLocationRenderMode.compass,
 
-          _onCityLoaded(cityData);
+          onUserLocationUpdated: _onUserLocationUpdated,
 
-          return Stack(
-            children: [
-              MapLibreMap(
-                styleString: 'https://tiles.openfreemap.org/styles/liberty',
+          onCameraTrackingDismissed: _onCameraTrackingDismissed,
+          onCameraTrackingChanged: _onCameraTrackingChanged,
 
-                // Fallback position while waiting for GPS.
-                initialCameraPosition: CameraPosition(
-                  target: _center,
-                  zoom: 12,
-                ),
+          locationEnginePlatforms: const LocationEnginePlatforms.android(
+            enableHighAccuracy: true,
+          ),
+        ),
 
-                onMapCreated: _onMapCreated,
-                onStyleLoadedCallback: _onStyleLoaded,
-
-                myLocationEnabled: true,
-                myLocationTrackingMode: MyLocationTrackingMode.trackingCompass,
-                myLocationRenderMode: MyLocationRenderMode.compass,
-
-                onUserLocationUpdated: _onUserLocationUpdated,
-
-                onCameraTrackingDismissed: _onCameraTrackingDismissed,
-                onCameraTrackingChanged: _onCameraTrackingChanged,
-
-                locationEnginePlatforms: const LocationEnginePlatforms.android(
-                  enableHighAccuracy: true,
-                ),
-              ),
-
-              // Return-to-location button.
-              if (!_isFollowingUser)
-                Positioned(
-                  right: 16,
-                  bottom: 32,
-                  child: FloatingActionButton(
-                    heroTag: 'follow-location-button',
-                    onPressed: _resumeLocationFollowing,
-                    tooltip: 'Follow my location',
-                    backgroundColor: Colors.white,
-                    foregroundColor: Theme.of(context).colorScheme.primary,
-                    child: const Icon(Icons.my_location),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
+        // Return-to-location button.
+        if (!_isFollowingUser)
+          Positioned(
+            right: 16,
+            bottom: 32,
+            child: FloatingActionButton(
+              heroTag: 'follow-location-button',
+              onPressed: _resumeLocationFollowing,
+              tooltip: 'Follow my location',
+              backgroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.primary,
+              child: const Icon(Icons.my_location),
+            ),
+          ),
+      ],
     );
   }
 }

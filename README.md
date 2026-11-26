@@ -30,6 +30,12 @@ Project for mobile systems
 #### 09.11.2026 - 15.11.2026
 - Initial work on displaying device location and orientation
 
+#### 16.11.2026 - 22.11.2026
+- Added following user location with ability to manually browse the map
+
+#### 23.11.2026 - 29.11.2026
+- Added UI for selecting route
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

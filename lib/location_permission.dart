@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:public_transport_assistant/map_screen/map_screen.dart';
+import 'package:public_transport_assistant/map_view/map_view.dart';
 
 class LocationPermissionScreen extends StatefulWidget {
   const LocationPermissionScreen({super.key});
@@ -53,7 +53,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
     }
 
     if (_permissionGranted) {
-      return const MapScreen();
+      return const MapView();
     }
 
     return Scaffold(
